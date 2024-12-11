@@ -13,6 +13,10 @@ from msckf_types import CameraCalibration, IMUData, PinholeIntrinsics
 from params import AlgorithmConfig, EurocDatasetCalibrationParams
 from spatial_transformations import hamiltonian_quaternion_to_rot_matrix
 from viewer import create_and_run
+import os
+cwd = os.getcwd()
+
+print(f"Working {cwd}")
 
 logger = logging.getLogger(__name__)
 

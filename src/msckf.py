@@ -673,9 +673,12 @@ class MSCKF():
     def propogate(self, imu_buffer):
 
         for imu in imu_buffer:
+            print("----------------------------------------------")
             F = self.compute_F(imu)
             G = self.compute_G()
             self.integrate(imu)
+            print(f"F {F}")
+            print(f"G {G}")
 
             Phi = None
             transition_method = AlgorithmConfig.MSCKFParams.StateTransitionIntegrationMethod
