@@ -43,7 +43,6 @@ levels = {
     'debug': logging.DEBUG
 }
 
-
 @click.command()
 @click.option('--euroc_folder', required=True, help="Path to a folder containing Euroc data. Typically called mav0")
 @click.option('--start_timestamp', required=True, help="Timestamp of where we want to start reading data from.")

@@ -400,6 +400,10 @@ class MSCKF():
                 bad_triangulation += 1
                 continue
 
+            optimized_pt = np.array([0.05, -0.15, 2.5])
+
+            print(f"  triangulated to {optimized_pt}")
+
             map_good_track_id_to_triangulated_pt[id] = optimized_pt
 
         logger.info("Updating with %i tracks out of %i", len(map_good_track_id_to_triangulated_pt), len(ids))
@@ -567,8 +571,14 @@ class MSCKF():
             track = self.map_id_to_feature_tracks[id]
             actual_num_measurements, residuals, H_X, H_f = self.compute_residual_and_jacobian(track, triangulated_pt)
 
+            print(f"H_X\n{H_X}")
+            print(f"H_f\n{H_f}")
+            print(f"residuals\n{residuals}")
+
             # Nullspace projection.
             A = self.project_left_nullspace(H_f)
+
+            print(f"A\n{A}")
 
             H_o = A.T @ H_X
 
@@ -577,6 +587,8 @@ class MSCKF():
             assert (cols == H_X.shape[1])
 
             r_o = A.T @ residuals
+
+            print(f"r_o\n{r_o}")
 
             dof = residuals.shape[0] / 2 - 1
             if not self.chi_square_test(H_o, r_o, dof):
@@ -673,12 +685,12 @@ class MSCKF():
     def propogate(self, imu_buffer):
 
         for imu in imu_buffer:
-            print("----------------------------------------------")
+            # print("----------------------------------------------")
             F = self.compute_F(imu)
             G = self.compute_G()
             self.integrate(imu)
-            print(f"F {F}")
-            print(f"G {G}")
+            # print(f"F\n{F}")
+            # print(f"G\n{G}")
 
             Phi = None
             transition_method = AlgorithmConfig.MSCKFParams.StateTransitionIntegrationMethod
@@ -692,6 +704,8 @@ class MSCKF():
             elif self.params.state_transition_integration == transition_method.matrix_exponent:
                 Fdt = F * imu.time_interval
                 Phi = scipy.linalg.expm(Fdt)
+
+            # print(f"Phi\n{Phi}")
 
             imu_covar = self.state.covariance[0:StateInfo.IMU_STATE_SIZE, 0:StateInfo.IMU_STATE_SIZE]
 
@@ -725,35 +739,37 @@ class MSCKF():
         assert (H.shape[0] == res.shape[0])
         logger.info("Residual norm is %f", np.linalg.norm(res))
 
-        if H.shape[0] > H.shape[1] and self.params.use_QR_compression:
-            # See "A Multi-state Constraint Kalman Filter for Vision-Aided Inertial Navigation" Eq 26-28 and
-            # "An Estimation Algorithm for  Vision-Based Exploration of Small Bodies in Space" Section V Part A.
-            #
-            # The math has to do with some matrix algebra taking advantage of the fact that Q is an orthogonal matrix
-            # and thus its transpose is equal to its inverse. I also advise you to understand what the QR factorization
-            # actually does.
-            #
-            # As for why we do it. Imagine we have 10 features seen in 10 cameras. This results in a matrix with 170
-            # rows(nullspace projection reduces it from 200). It can be compressed to a matrix of state vector size
-            # so in this example it would be 75(IMU state + 6*10 cameras).
-            # The Kalman gain requires matrix inversion which generally is an O(n^3) algorithm. So 75^3<<170^3
-            # is a big computation saving.
-            # Note that I ignore the extra cost of the QR decomposition, but it ends up being worth it.
-
-            # Here RT is the upper triangular matrix
-            Q1, RT = np.linalg.qr(H, mode='reduced')
-            H_thin = RT
-            r_thin = Q1.T @ res
-            R_thin = Q1.T @ R @ Q1
-        else:
-            H_thin = H
-            r_thin = res
-            R_thin = R
+        # if H.shape[0] > H.shape[1] and self.params.use_QR_compression:
+        #     # See "A Multi-state Constraint Kalman Filter for Vision-Aided Inertial Navigation" Eq 26-28 and
+        #     # "An Estimation Algorithm for  Vision-Based Exploration of Small Bodies in Space" Section V Part A.
+        #     #
+        #     # The math has to do with some matrix algebra taking advantage of the fact that Q is an orthogonal matrix
+        #     # and thus its transpose is equal to its inverse. I also advise you to understand what the QR factorization
+        #     # actually does.
+        #     #
+        #     # As for why we do it. Imagine we have 10 features seen in 10 cameras. This results in a matrix with 170
+        #     # rows(nullspace projection reduces it from 200). It can be compressed to a matrix of state vector size
+        #     # so in this example it would be 75(IMU state + 6*10 cameras).
+        #     # The Kalman gain requires matrix inversion which generally is an O(n^3) algorithm. So 75^3<<170^3
+        #     # is a big computation saving.
+        #     # Note that I ignore the extra cost of the QR decomposition, but it ends up being worth it.
+        #
+        #     # Here RT is the upper triangular matrix
+        #     Q1, RT = np.linalg.qr(H, mode='reduced')
+        #     H_thin = RT
+        #     r_thin = Q1.T @ res
+        #     R_thin = Q1.T @ R @ Q1
+        # else:
+        H_thin = H
+        r_thin = res
+        R_thin = R
 
         H = H_thin
         res = r_thin
         R = R_thin
         H_T = H.transpose()
+
+        print(f"P\n{self.state.covariance}")
 
         cur_cov = self.state.covariance
         K = cur_cov @ H_T @ np.linalg.inv((H @ cur_cov @ H_T + R))
@@ -762,6 +778,9 @@ class MSCKF():
         # Update the covariance using the joseph form(is more numerically stable)
         new_cov = (np.eye(state_size) - K @ H) @ cur_cov @ (np.eye(state_size) - K @ H).T + K @ R @ K.T
         delta_x = K @ res
+
+        print(f"K\n{K}")
+        print(f"delta_x\n{delta_x}")
 
         # Apply the new covariance and the update
         self.state.covariance = new_cov
@@ -846,6 +865,13 @@ class MSCKF():
         F[st.VEL_SLICE, st.ATT_SLICE] = -imu_SO3_global.transpose() @ skew_matrix(unbiased_acc_meas)
         F[st.VEL_SLICE, st.BA_SLICE] = -imu_SO3_global.transpose()
         F[st.POS_SLICE, st.VEL_SLICE] = np.eye(3)
+
+        # Attitude, since we are storing the error state the size is 3 rather than the 4 required for the quaternion.
+        # ATT_SLICE = slice(0, 3)
+        # POS_SLICE = slice(3, 6)  # Position
+        # VEL_SLICE = slice(6, 9)  # Velocity
+        # BG_SLICE = slice(9, 12)  # Bias gyro
+        # BA_SLICE = slice(12, 15)  # Bias accelerometer
         return F
 
     def compute_G(self):
