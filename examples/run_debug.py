@@ -43,39 +43,42 @@ K = np.array([[300.0, 0.0, 400.0], [250.0, 0.0, 300.0], [0.0, 0.0, 1.0]])
 # Point in global coordinates in front of the camera
 pointG = np.array([0.1, -0.2, 2.3])
 
-print(f"Init P\n{msckf.state.covariance}")
+# print(f"Init P\n{msckf.state.covariance}")
 
-for frameID in range(1):
+for frameID in range(3):
     imu_buffer = []
-    for idxImu in range(1):
+    for idxImu in range(2):
         acc = np.array([0.05, 0.10, 10.1])
         # gyro = np.array([-0.04, 0.08, -0.03])
         gyro = np.array([0.0, 0.0, 0.0])
         imu_buffer.append(IMUData(acc, gyro, 0, dt_seconds))
         timestamp_seconds += dt_seconds
+
     msckf.propogate(imu_buffer)
 
-    print(f"P\n{msckf.state.covariance}")
+    # print(f"P\n{msckf.state.covariance}")
 
-    # print("------------- Propagate")
-    # print(f"quat_imu_to_global: {msckf.state.imu_JPLQ_global}")
-    # print(f"global_t_imu:       {msckf.state.global_t_imu}")
-    # print(f"vel:                {msckf.state.velocity}")
-    #
-    # ids = []
-    # measurements = []
-    #
-    # # Location of the point in camera frame
-    # pointC = pointG - msckf.state.global_t_imu
-    #
-    # # Append the point to observation list
-    # ids.append(0)
-    # measurements.append([pointC[0] / pointC[2], pointC[1] / pointC[2]])
-    # msckf.add_camera_features(np.array(ids), np.array(measurements))
-    #
-    # print("------------- Update")
-    # print(f"quat_imu_to_global: {msckf.state.imu_JPLQ_global}")
-    # print(f"global_t_imu:       {msckf.state.global_t_imu}")
-    # print(f"vel:                {msckf.state.velocity}")
+    print("------------- Propagate")
+    print(f"quat_imu_to_global: {msckf.state.imu_JPLQ_global}")
+    print(f"global_t_imu:       {msckf.state.global_t_imu}")
+    print(f"vel:                {msckf.state.velocity}")
+
+    ids = []
+    measurements = []
+
+    # Location of the point in camera frame
+    pointC = pointG - msckf.state.global_t_imu
+
+    # Append the point to observation list
+    ids.append(0)
+    measurements.append([pointC[0] / pointC[2], pointC[1] / pointC[2]])
+    msckf.add_camera_features(np.array(ids), np.array(measurements))
+
+    print("------------- Update")
+    print(f"quat_imu_to_global: {msckf.state.imu_JPLQ_global}")
+    print(f"global_t_imu:       {msckf.state.global_t_imu}")
+    print(f"vel:                {msckf.state.velocity}")
+
+print(f"Final P\n{msckf.state.covariance}")
 
 print("\nDone!")

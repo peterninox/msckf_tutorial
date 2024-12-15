@@ -400,6 +400,7 @@ class MSCKF():
                 bad_triangulation += 1
                 continue
 
+            # DEBUGGING HACK!
             optimized_pt = np.array([0.05, -0.15, 2.5])
 
             print(f"  triangulated to {optimized_pt}")
@@ -580,6 +581,8 @@ class MSCKF():
 
             print(f"A\n{A}")
 
+            print(f"Test of A\n{H_f.T @ A}")
+
             H_o = A.T @ H_X
 
             rows, cols = H_o.shape
@@ -689,8 +692,8 @@ class MSCKF():
             F = self.compute_F(imu)
             G = self.compute_G()
             self.integrate(imu)
-            # print(f"F\n{F}")
-            # print(f"G\n{G}")
+            print(f"F\n{F}")
+            print(f"G\n{G}")
 
             Phi = None
             transition_method = AlgorithmConfig.MSCKFParams.StateTransitionIntegrationMethod
@@ -705,9 +708,11 @@ class MSCKF():
                 Fdt = F * imu.time_interval
                 Phi = scipy.linalg.expm(Fdt)
 
-            # print(f"Phi\n{Phi}")
+            print(f"Phi\n{Phi}")
 
             imu_covar = self.state.covariance[0:StateInfo.IMU_STATE_SIZE, 0:StateInfo.IMU_STATE_SIZE]
+
+            # print(f"imu_covar\n{imu_covar}")
 
             transition_model = self.params.transition_matrix_method
             if transition_model == AlgorithmConfig.MSCKFParams.TransitionMatrixModel.continous_discrete:
@@ -723,6 +728,12 @@ class MSCKF():
 
             new_cov_symmetric = symmeterize_matrix(new_covariance)
             self.state.covariance[0:StateInfo.IMU_STATE_SIZE, 0:StateInfo.IMU_STATE_SIZE] = new_cov_symmetric
+
+            print(f"Propagate P\n{self.state.covariance}")
+
+            print(f"state{{ loc=[{self.state.global_t_imu[0]} {self.state.global_t_imu[1]} {self.state.global_t_imu[2]}] "
+                  f" vel=[{self.state.velocity[0]} {self.state.velocity[1]} {self.state.velocity[2]}] }}")
+
 
     def update_EKF(self, res, H, R):
         """
@@ -769,18 +780,22 @@ class MSCKF():
         R = R_thin
         H_T = H.transpose()
 
-        print(f"P\n{self.state.covariance}")
+        # print(f"P\n{self.state.covariance}")
 
         cur_cov = self.state.covariance
         K = cur_cov @ H_T @ np.linalg.inv((H @ cur_cov @ H_T + R))
         state_size = self.state.get_state_size()
 
+        print(f"before update P\n{cur_cov}")
+
         # Update the covariance using the joseph form(is more numerically stable)
         new_cov = (np.eye(state_size) - K @ H) @ cur_cov @ (np.eye(state_size) - K @ H).T + K @ R @ K.T
         delta_x = K @ res
 
-        print(f"K\n{K}")
-        print(f"delta_x\n{delta_x}")
+        print(f"after update P\n{new_cov}")
+
+        # print(f"K\n{K}")
+        # print(f"delta_x\n{delta_x}")
 
         # Apply the new covariance and the update
         self.state.covariance = new_cov
