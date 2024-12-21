@@ -401,9 +401,9 @@ class MSCKF():
                 continue
 
             # DEBUGGING HACK!
-            optimized_pt = np.array([0.05, -0.15, 2.5])
+            # optimized_pt = np.array([0.05, -0.15, 2.5])
 
-            print(f"  triangulated to {optimized_pt}")
+            # print(f"  triangulated to {optimized_pt}")
 
             map_good_track_id_to_triangulated_pt[id] = optimized_pt
 
@@ -572,18 +572,20 @@ class MSCKF():
             track = self.map_id_to_feature_tracks[id]
             actual_num_measurements, residuals, H_X, H_f = self.compute_residual_and_jacobian(track, triangulated_pt)
 
-            print(f"H_X\n{H_X}")
-            print(f"H_f\n{H_f}")
-            print(f"residuals\n{residuals}")
+            # print(f"H_X\n{H_X}")
+            # print(f"H_f\n{H_f}")
+            # print(f"residuals\n{residuals}")
 
             # Nullspace projection.
             A = self.project_left_nullspace(H_f)
 
-            print(f"A\n{A}")
+            # print(f"A\n{A}")
 
-            print(f"Test of A\n{H_f.T @ A}")
+            # print(f"Test of A\n{H_f.T @ A}")
 
             H_o = A.T @ H_X
+
+            # print(f"H_o\n{H_o}")
 
             rows, cols = H_o.shape
             assert (rows == 2 * actual_num_measurements - 3)
@@ -591,7 +593,7 @@ class MSCKF():
 
             r_o = A.T @ residuals
 
-            print(f"r_o\n{r_o}")
+            # print(f"r_o\n{r_o}")
 
             dof = residuals.shape[0] / 2 - 1
             if not self.chi_square_test(H_o, r_o, dof):
@@ -657,6 +659,12 @@ class MSCKF():
 
         k1_v_dot = q0.rotation_matrix().T @ unbiased_acc + self.gravity
 
+        print(q0.rotation_matrix())
+        # print(f"integrate: accel: {imu_measurement.linear_acc} vel: {v0} global: {k1_v_dot} quat={q0.q}")
+        foo = [q0.q[0]/q0.q[3], q0.q[1]/q0.q[3], q0.q[2]/q0.q[3]]
+        print(f"{imu_measurement.timestamp}")
+        print(f"before: integrate: gyro: {imu_measurement.angular_vel} unbiased: {unbiased_gyro} global: {k1_v_dot} quat={foo}")
+
         k1_p_dot = v0
 
         # k2 = f(tn + dt / 2, yn + k1 * dt / 2)
@@ -685,6 +693,11 @@ class MSCKF():
         self.state.global_t_imu = p
         self.state.velocity = v
 
+        q0 = self.state.imu_JPLQ_global
+        foo = [q0.q[0]/q0.q[3], q0.q[1]/q0.q[3], q0.q[2]/q0.q[3]]
+        print(f"after:  integrate: gyro: {imu_measurement.angular_vel} unbiased: {unbiased_gyro} global: {k1_v_dot} quat={foo}")
+
+
     def propogate(self, imu_buffer):
 
         for imu in imu_buffer:
@@ -692,8 +705,8 @@ class MSCKF():
             F = self.compute_F(imu)
             G = self.compute_G()
             self.integrate(imu)
-            print(f"F\n{F}")
-            print(f"G\n{G}")
+            # print(f"F\n{F}")
+            # print(f"G\n{G}")
 
             Phi = None
             transition_method = AlgorithmConfig.MSCKFParams.StateTransitionIntegrationMethod
@@ -704,20 +717,21 @@ class MSCKF():
                 Fdt2 = Fdt @ Fdt
                 Fdt3 = Fdt2 @ Fdt
                 Phi = np.eye(15) + Fdt + 0.5 * Fdt2 + 1.0 / 6.0 * Fdt3
+                print("WRONG METHOD A")
             elif self.params.state_transition_integration == transition_method.matrix_exponent:
                 Fdt = F * imu.time_interval
                 Phi = scipy.linalg.expm(Fdt)
+                print("WRONG METHOD B")
 
-            print(f"Phi\n{Phi}")
+            # print(f"Phi\n{Phi}")
 
             imu_covar = self.state.covariance[0:StateInfo.IMU_STATE_SIZE, 0:StateInfo.IMU_STATE_SIZE]
-
-            # print(f"imu_covar\n{imu_covar}")
 
             transition_model = self.params.transition_matrix_method
             if transition_model == AlgorithmConfig.MSCKFParams.TransitionMatrixModel.continous_discrete:
                 Q = G @ self.noise_matrix @ G.T * imu.time_interval
                 new_covariance = Phi @ (imu_covar + Q) @ Phi.T
+                print("WRONG METHOD C")
             else:
                 Q = G @ self.noise_matrix @ G.T * imu.time_interval
                 new_covariance = Phi @ imu_covar @ Phi.T + Q
@@ -729,10 +743,10 @@ class MSCKF():
             new_cov_symmetric = symmeterize_matrix(new_covariance)
             self.state.covariance[0:StateInfo.IMU_STATE_SIZE, 0:StateInfo.IMU_STATE_SIZE] = new_cov_symmetric
 
-            print(f"Propagate P\n{self.state.covariance}")
+            # print(f"Propagate P {self.state.covariance.shape}\n{self.state.covariance}")
 
-            print(f"state{{ loc=[{self.state.global_t_imu[0]} {self.state.global_t_imu[1]} {self.state.global_t_imu[2]}] "
-                  f" vel=[{self.state.velocity[0]} {self.state.velocity[1]} {self.state.velocity[2]}] }}")
+            # print(f"state{{ loc=[{self.state.global_t_imu[0]} {self.state.global_t_imu[1]} {self.state.global_t_imu[2]}] "
+            #       f" vel=[{self.state.velocity[0]} {self.state.velocity[1]} {self.state.velocity[2]}] }}")
 
 
     def update_EKF(self, res, H, R):
@@ -786,15 +800,18 @@ class MSCKF():
         K = cur_cov @ H_T @ np.linalg.inv((H @ cur_cov @ H_T + R))
         state_size = self.state.get_state_size()
 
-        print(f"before update P\n{cur_cov}")
+        # print(f"H\n{H}")
+        # print(f"R\n{R}")
+        # print(f"K\n{K}")
+
+        # print(f"before update P\n{cur_cov}")
 
         # Update the covariance using the joseph form(is more numerically stable)
         new_cov = (np.eye(state_size) - K @ H) @ cur_cov @ (np.eye(state_size) - K @ H).T + K @ R @ K.T
         delta_x = K @ res
 
-        print(f"after update P\n{new_cov}")
+        # print(f"after update P\n{new_cov}")
 
-        # print(f"K\n{K}")
         # print(f"delta_x\n{delta_x}")
 
         # Apply the new covariance and the update
@@ -831,6 +848,8 @@ class MSCKF():
         # See Eq 15 from above reference
         augmentation_matrix = np.eye(new_state_size, cur_state_size)
         augmentation_matrix[cur_state_size:, :] = jac
+
+        # print(f"augmentation_matrix {augmentation_matrix.shape}\n{augmentation_matrix}")
 
         new_covariance = augmentation_matrix @ self.state.covariance @ augmentation_matrix.transpose()
         # Helps with numerical problems

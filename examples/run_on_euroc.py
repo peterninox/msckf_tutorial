@@ -60,6 +60,10 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
                                                            euroc_calib.cam0_distortion_coeffs)
     camera_calib.set_extrinsics(euroc_calib.T_imu_cam0)
     config = AlgorithmConfig()
+    config.msckf_params.max_track_length = 3
+    transition_method = AlgorithmConfig.MSCKFParams.StateTransitionIntegrationMethod
+    config.msckf_params.state_transition_integration = transition_method.Euler
+
     feature_tracker = FeatureTracker(config.feature_tracker_params, camera_calib)
 
     msckf = MSCKF(config.msckf_params, camera_calib)
@@ -119,6 +123,7 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
             feature_tracker.track(img, imu_buffer)
             measurements, ids = feature_tracker.get_current_normalized_keypoints_and_ids()
             if first_time:
+                gt_nano = cur_data["gt"].timestamp
                 gt_index = cur_data["gt"].index
                 gt_line = ground_truth_data[gt_index]
                 gt = np.array([gt_line[1:]]).astype(np.float64).squeeze()
@@ -130,6 +135,8 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
                 gt_rot_matrx = hamiltonian_quaternion_to_rot_matrix(gt_quat)
                 msckf.initialize(gt_rot_matrx, gt_pos, gt_vel, gt_bias_acc, gt_bias_gyro)
                 first_time = False
+                quat3 = [gt_quat[1]/gt_quat[0],gt_quat[2]/gt_quat[0],gt_quat[3]/gt_quat[0] ]
+                print(f"initialized {gt_nano} T={msckf.state.global_t_imu} V={msckf.state.velocity} rot={quat3}")
                 continue
 
             msckf.propogate(imu_buffer)
@@ -143,6 +150,9 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
                 est_pose_queue.put(est_pose)
             msckf.remove_old_clones()
             imu_buffer.clear()
+
+            timestamp = cur_data["camera"].timestamp
+            print(f"{timestamp} estimated T={msckf.state.global_t_imu} V={msckf.state.velocity}")
 
             if ground_truth_queue and "gt" in cur_data:
                 gt_index = cur_data["gt"].index

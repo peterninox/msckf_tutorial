@@ -49,8 +49,8 @@ for frameID in range(3):
     imu_buffer = []
     for idxImu in range(2):
         acc = np.array([0.05, 0.10, 10.1])
-        # gyro = np.array([-0.04, 0.08, -0.03])
-        gyro = np.array([0.0, 0.0, 0.0])
+        gyro = np.array([-0.04, 0.08, -0.03])
+        # gyro = np.array([0.0, 0.0, 0.0])
         imu_buffer.append(IMUData(acc, gyro, 0, dt_seconds))
         timestamp_seconds += dt_seconds
 
@@ -58,7 +58,7 @@ for frameID in range(3):
 
     # print(f"P\n{msckf.state.covariance}")
 
-    print("------------- Propagate")
+    print(f"------------- Propagate {frameID}")
     print(f"quat_imu_to_global: {msckf.state.imu_JPLQ_global}")
     print(f"global_t_imu:       {msckf.state.global_t_imu}")
     print(f"vel:                {msckf.state.velocity}")
@@ -79,6 +79,6 @@ for frameID in range(3):
     print(f"global_t_imu:       {msckf.state.global_t_imu}")
     print(f"vel:                {msckf.state.velocity}")
 
-print(f"Final P\n{msckf.state.covariance}")
+print(f"Final P {msckf.state.covariance.shape}\n{msckf.state.covariance}")
 
 print("\nDone!")
