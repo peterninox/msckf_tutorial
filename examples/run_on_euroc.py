@@ -133,10 +133,12 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
                 gt_bias_gyro = gt[10:13]
                 gt_bias_acc = gt[13:16]
                 gt_rot_matrx = hamiltonian_quaternion_to_rot_matrix(gt_quat)
+                print(gt_rot_matrx)
                 msckf.initialize(gt_rot_matrx, gt_pos, gt_vel, gt_bias_acc, gt_bias_gyro)
                 first_time = False
                 quat3 = [gt_quat[1]/gt_quat[0],gt_quat[2]/gt_quat[0],gt_quat[3]/gt_quat[0] ]
-                print(f"initialized {gt_nano} T={msckf.state.global_t_imu} V={msckf.state.velocity} rot={quat3}")
+                print(f"initialized {gt_nano} T={msckf.state.global_t_imu} V={msckf.state.velocity} rot={quat3} bias-acc={msckf.state.bias_acc} bias-gyro={msckf.state.bias_gyro}")
+                print(f"P\n{msckf.state.covariance}")
                 continue
 
             msckf.propogate(imu_buffer)

@@ -62,6 +62,7 @@ class State():
     def __init__(self):
 
         # Attitude of the camera. Stores the rotation of the IMU to the global frame as a JPL quaternion.
+        # PJA - this has to be global to IMU or propagate formula is incorrect in this implementation
         self.imu_JPLQ_global = JPLQuaternion.identity()
 
         # Position of the IMU in the global frame.
@@ -657,13 +658,14 @@ class MSCKF():
         dR_dt_transpose = JPLQuaternion.from_array(dq_dt_arr).rotation_matrix().T
         dR_dt2_transpose = JPLQuaternion.from_array(dq_dt2_arr).rotation_matrix().T
 
+        # PJA - q0 has to be rotation from Global to IMU or else this equation doesn't make sense
         k1_v_dot = q0.rotation_matrix().T @ unbiased_acc + self.gravity
 
-        print(q0.rotation_matrix())
+        # print(q0.rotation_matrix())
         # print(f"integrate: accel: {imu_measurement.linear_acc} vel: {v0} global: {k1_v_dot} quat={q0.q}")
-        foo = [q0.q[0]/q0.q[3], q0.q[1]/q0.q[3], q0.q[2]/q0.q[3]]
-        print(f"{imu_measurement.timestamp}")
-        print(f"before: integrate: gyro: {imu_measurement.angular_vel} unbiased: {unbiased_gyro} global: {k1_v_dot} quat={foo}")
+        # foo = [q0.q[0]/q0.q[3], q0.q[1]/q0.q[3], q0.q[2]/q0.q[3]]
+        # print(f"{imu_measurement.timestamp}")
+        # print(f"before: integrate: gyro: {imu_measurement.angular_vel} unbiased: {unbiased_gyro} global: {k1_v_dot} quat={foo}")
 
         k1_p_dot = v0
 
@@ -694,8 +696,8 @@ class MSCKF():
         self.state.velocity = v
 
         q0 = self.state.imu_JPLQ_global
-        foo = [q0.q[0]/q0.q[3], q0.q[1]/q0.q[3], q0.q[2]/q0.q[3]]
-        print(f"after:  integrate: gyro: {imu_measurement.angular_vel} unbiased: {unbiased_gyro} global: {k1_v_dot} quat={foo}")
+        # foo = [q0.q[0]/q0.q[3], q0.q[1]/q0.q[3], q0.q[2]/q0.q[3]]
+        # print(f"after:  integrate: gyro: {imu_measurement.angular_vel} unbiased: {unbiased_gyro} global: {k1_v_dot} quat={foo}")
 
 
     def propogate(self, imu_buffer):
@@ -735,6 +737,11 @@ class MSCKF():
             else:
                 Q = G @ self.noise_matrix @ G.T * imu.time_interval
                 new_covariance = Phi @ imu_covar @ Phi.T + Q
+                # print(f"periodS: {imu.time_interval}")
+                # print(f"Q_imu\n{self.noise_matrix}")
+                # print(f"G\n{G}")
+                # print(f"G*Q_imu\n{G @ self.noise_matrix * imu.time_interval}")
+                # print(f"Q\n{Q}")
 
             # Update the imu-camera covariance
             self.state.covariance[0:15, 15:] = (Phi @ self.state.covariance[0:15, 15:])
@@ -743,10 +750,10 @@ class MSCKF():
             new_cov_symmetric = symmeterize_matrix(new_covariance)
             self.state.covariance[0:StateInfo.IMU_STATE_SIZE, 0:StateInfo.IMU_STATE_SIZE] = new_cov_symmetric
 
-            # print(f"Propagate P {self.state.covariance.shape}\n{self.state.covariance}")
+            # print(f"Propagate P\n{new_cov_symmetric}")
 
-            # print(f"state{{ loc=[{self.state.global_t_imu[0]} {self.state.global_t_imu[1]} {self.state.global_t_imu[2]}] "
-            #       f" vel=[{self.state.velocity[0]} {self.state.velocity[1]} {self.state.velocity[2]}] }}")
+            print(f"prop state{{ loc=[{self.state.global_t_imu[0]} {self.state.global_t_imu[1]} {self.state.global_t_imu[2]}] "
+                  f" vel=[{self.state.velocity[0]} {self.state.velocity[1]} {self.state.velocity[2]}] }}")
 
 
     def update_EKF(self, res, H, R):
