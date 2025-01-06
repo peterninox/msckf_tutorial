@@ -8,7 +8,7 @@ import numpy as np
 
 from dataset_utils import TimestampSynchronizer, csv_read_matrix
 from feature_tracker import FeatureTracker
-from msckf import MSCKF
+from msckf import MSCKF, quat4to3
 from msckf_types import CameraCalibration, IMUData, PinholeIntrinsics
 from params import AlgorithmConfig, EurocDatasetCalibrationParams
 from spatial_transformations import hamiltonian_quaternion_to_rot_matrix
@@ -60,9 +60,9 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
                                                            euroc_calib.cam0_distortion_coeffs)
     camera_calib.set_extrinsics(euroc_calib.T_imu_cam0)
     config = AlgorithmConfig()
-    config.msckf_params.max_track_length = 3
-    transition_method = AlgorithmConfig.MSCKFParams.StateTransitionIntegrationMethod
-    config.msckf_params.state_transition_integration = transition_method.Euler
+    config.msckf_params.max_track_length = 6
+    # transition_method = AlgorithmConfig.MSCKFParams.StateTransitionIntegrationMethod
+    # config.msckf_params.state_transition_integration = transition_method.Euler
 
     feature_tracker = FeatureTracker(config.feature_tracker_params, camera_calib)
 
@@ -113,7 +113,7 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
             last_imu_timestamp = timestamp
             dt_seconds = dt * NANOSECOND_TO_SECOND
             timestamp_seconds = timestamp * NANOSECOND_TO_SECOND
-            imu_buffer.append(IMUData(acc, gyro, timestamp_seconds, dt_seconds))
+            imu_buffer.append(IMUData(acc, gyro, timestamp_seconds, dt_seconds, timestamp))
 
         if "camera" in cur_data:
             index = cur_data["camera"].index
@@ -133,12 +133,11 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
                 gt_bias_gyro = gt[10:13]
                 gt_bias_acc = gt[13:16]
                 gt_rot_matrx = hamiltonian_quaternion_to_rot_matrix(gt_quat)
-                print(gt_rot_matrx)
                 msckf.initialize(gt_rot_matrx, gt_pos, gt_vel, gt_bias_acc, gt_bias_gyro)
                 first_time = False
                 quat3 = [gt_quat[1]/gt_quat[0],gt_quat[2]/gt_quat[0],gt_quat[3]/gt_quat[0] ]
-                print(f"initialized {gt_nano} T={msckf.state.global_t_imu} V={msckf.state.velocity} rot={quat3} bias-acc={msckf.state.bias_acc} bias-gyro={msckf.state.bias_gyro}")
-                print(f"P\n{msckf.state.covariance}")
+                print(f"initialized {gt_nano} T={msckf.state.global_t_imu} V={msckf.state.velocity} ori={quat3} bias-acc={msckf.state.bias_acc} bias-gyro={msckf.state.bias_gyro}")
+                # print(f"P\n{msckf.state.covariance}")
                 continue
 
             msckf.propogate(imu_buffer)
@@ -154,7 +153,10 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
             imu_buffer.clear()
 
             timestamp = cur_data["camera"].timestamp
-            print(f"{timestamp} estimated T={msckf.state.global_t_imu} V={msckf.state.velocity}")
+            print(f"Update: {timestamp} estimated T={msckf.state.global_t_imu} V={msckf.state.velocity} ori={quat4to3(msckf.state.imu_JPLQ_global)}")
+            print(f"       views: count={len(msckf.state.clones)}")
+            for idx, clone in enumerate(msckf.state.clones.values()):
+                print(f"    [{idx}] {clone.camera_id} loc={clone.camera_JPLPose_global.t} ori={quat4to3(clone.camera_JPLPose_global.q)}")
 
             if ground_truth_queue and "gt" in cur_data:
                 gt_index = cur_data["gt"].index

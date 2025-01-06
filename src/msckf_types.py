@@ -62,12 +62,12 @@ class CameraCalibration():
 
 
 @dataclass
-class IMUData():
-
+class IMUData:
     linear_acc: np.ndarray
     angular_vel: np.ndarray
     timestamp: float
     time_interval: float = 0
+    nano: int = 0
 
 
 class FeatureTrack():

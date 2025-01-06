@@ -17,6 +17,10 @@ from triangulation import linear_triangulate, optimize_point_location
 
 logger = logging.getLogger(__name__)
 
+def quat4to3(quat):
+    q = quat.q
+    w = q[3]
+    return [q[0]/w, q[1]/w, q[2]/w]
 
 class StateInfo():
     ''' Stores size and indexes related to the MSCKF state vector'''
@@ -402,6 +406,7 @@ class MSCKF():
                 continue
 
             # DEBUGGING HACK!
+            # optimized_pt = np.array([.11989693 , -.195172954 ,  2.78793698])
             # optimized_pt = np.array([0.05, -0.15, 2.5])
 
             # print(f"  triangulated to {optimized_pt}")
@@ -453,10 +458,15 @@ class MSCKF():
             if clone_index == None:
                 continue
             clone = self.state.clones[cam_id]
+
+            # print(f"view[{idx}] loc={clone.camera_JPLPose_global.t} quat={clone.camera_JPLPose_global.q}")
+
             camera_R_global = clone.camera_JPLPose_global.q.rotation_matrix()
             camera_t_global = camera_R_global @ -clone.camera_JPLPose_global.t
 
             pt_camera = camera_R_global @ pt_global + camera_t_global
+            # print(f"pt_camera={pt_camera}")
+
             # The actual measurement index. Needed if one of the camera clones is invalid.
             m_idx = actual_measurement_count
             # This slice corresponds to the rows that relate to this measurement.
@@ -465,6 +475,8 @@ class MSCKF():
             normalized_x = pt_camera[0] / pt_camera[2]
             normalized_y = pt_camera[1] / pt_camera[2]
             error = np.array([measurement[0] - normalized_x, measurement[1] - normalized_y])
+
+            # print(f"obs: {measurement} pred: [{normalized_x} {normalized_y}]")
 
             residuals[measurement_slice] = error
 
@@ -475,7 +487,12 @@ class MSCKF():
             invZ = 1.0 / pt_camera[2]
             jac_i = invZ * np.array([[1.0, 0.0, -X * invZ], [0.0, 1.0, -Y * invZ]])
 
+            # print(f"R\n{camera_R_global}")
+            # print(f"jac_i\n{jac_i}")
+
             H_f[measurement_slice] = jac_i @ camera_R_global
+
+            # print(f"H_f[{idx}]\n{H_f[measurement_slice]}")
 
             # Compute jacobian with respect to the current camera clone
             # Eq 22 in the tech report
@@ -644,6 +661,8 @@ class MSCKF():
         p0 = self.state.global_t_imu
         v0 = self.state.velocity
 
+        # print(f"integrate: init: p{p0} v{v0} q[{q0}]")
+
         omega = jpl_omega(unbiased_gyro)
 
         if (gyro_norm > 1e-5):
@@ -695,7 +714,7 @@ class MSCKF():
         self.state.global_t_imu = p
         self.state.velocity = v
 
-        q0 = self.state.imu_JPLQ_global
+        # q0 = self.state.imu_JPLQ_global
         # foo = [q0.q[0]/q0.q[3], q0.q[1]/q0.q[3], q0.q[2]/q0.q[3]]
         # print(f"after:  integrate: gyro: {imu_measurement.angular_vel} unbiased: {unbiased_gyro} global: {k1_v_dot} quat={foo}")
 
@@ -719,7 +738,7 @@ class MSCKF():
                 Fdt2 = Fdt @ Fdt
                 Fdt3 = Fdt2 @ Fdt
                 Phi = np.eye(15) + Fdt + 0.5 * Fdt2 + 1.0 / 6.0 * Fdt3
-                print("WRONG METHOD A")
+                # print("WRONG METHOD A")
             elif self.params.state_transition_integration == transition_method.matrix_exponent:
                 Fdt = F * imu.time_interval
                 Phi = scipy.linalg.expm(Fdt)
@@ -752,8 +771,9 @@ class MSCKF():
 
             # print(f"Propagate P\n{new_cov_symmetric}")
 
-            print(f"prop state{{ loc=[{self.state.global_t_imu[0]} {self.state.global_t_imu[1]} {self.state.global_t_imu[2]}] "
-                  f" vel=[{self.state.velocity[0]} {self.state.velocity[1]} {self.state.velocity[2]}] }}")
+            print(f"propagate: time={imu.nano} dt={imu.time_interval}")
+            print(f"  state{{ loc=[{self.state.global_t_imu[0]} {self.state.global_t_imu[1]} {self.state.global_t_imu[2]}] "
+                  f" vel=[{self.state.velocity[0]} {self.state.velocity[1]} {self.state.velocity[2]}] ori={quat4to3(self.state.imu_JPLQ_global)} }}")
 
 
     def update_EKF(self, res, H, R):
@@ -801,6 +821,9 @@ class MSCKF():
         R = R_thin
         H_T = H.transpose()
 
+        # print(f"H\n{H}")
+        # print(f"res\n{res}")
+        # print(f"R\n{R}")
         # print(f"P\n{self.state.covariance}")
 
         cur_cov = self.state.covariance
@@ -818,6 +841,7 @@ class MSCKF():
         delta_x = K @ res
 
         # print(f"after update P\n{new_cov}")
+        # print(f"after norm(P)={np.linalg.norm(new_cov)}")
 
         # print(f"delta_x\n{delta_x}")
 
