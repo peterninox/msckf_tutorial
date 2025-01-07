@@ -1,5 +1,7 @@
 import numpy as np
 import scipy
+
+from jpl_quat_ops import JPLQuaternion
 from msckf import MSCKF, quat4to3
 from msckf_types import CameraCalibration, IMUData, PinholeIntrinsics
 from params import AlgorithmConfig, EurocDatasetCalibrationParams
@@ -8,8 +10,14 @@ import sys
 np.set_printoptions(threshold=np.inf)
 np.set_printoptions(linewidth=np.inf)
 
+extrinsics = np.eye(4)
+quat_cam_to_imu = JPLQuaternion(0.05, -0.03, 0.2, 1.0)
+extrinsics[0:3, 0:3] = quat_cam_to_imu.rotation_matrix()
+extrinsics[0:3, 3] = [0.1, 0.2, -0.05]
+
 camera_calib = CameraCalibration()
-camera_calib.set_extrinsics(np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]]))
+# camera_calib.set_extrinsics(np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]]))
+camera_calib.set_extrinsics(extrinsics)
 
 config = AlgorithmConfig()
 config.msckf_params.max_track_length = 3

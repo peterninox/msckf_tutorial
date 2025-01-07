@@ -170,6 +170,18 @@ def run_on_euroc(euroc_folder, start_timestamp, use_viewer, log_level):
                 gt_transform[0:3, 3] = gt_pos
                 ground_truth_queue.put(gt_transform)
 
+            if "gt" in cur_data:
+                gt_index = cur_data["gt"].index
+                gt_line = ground_truth_data[gt_index]
+                gt = np.array([gt_line[1:]]).astype(np.float64).squeeze()
+                gt_pos = gt[0:3]
+                gt_quat = gt[3:7]
+                gt_vel = gt[7:10]
+                gt_rot_matrx = hamiltonian_quaternion_to_rot_matrix(gt_quat)
+                new_vel = gt_rot_matrx.T @ gt_vel
+                print(f"Truth: loc={gt_pos} vel={new_vel} loc-err={np.linalg.norm(gt_pos-msckf.state.global_t_imu)}")
+
+
 
 if __name__ == '__main__':
     run_on_euroc()
